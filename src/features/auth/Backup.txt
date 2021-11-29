@@ -1,0 +1,285 @@
+import React from 'react'
+import { AppDispatch } from '../../app/store'
+import { useSelector, useDispatch } from 'react-redux'
+import styles from "./Auth.module.css";
+import Modal from "react-modal";
+import { Formik } from "formik";
+import * as Yup from "yup";
+import { TextField, Button, CircularProgress } from "@material-ui/core";
+
+import {
+  selectIsLoadingAuth,
+  selectOpenSignIn,
+  selectOpenSignUp,
+  setOpenSignIn,
+  resetOpenSignIn,
+  setOpenSignUp,
+  resetOpenSignUp,
+  fetchCredStart,
+  fetchCredEnd,
+  fetchAsyncLogin,
+  fetchAsyncRegister,
+  fetchAsyncGetMyProf,
+  fetchAsyncGetProfs,
+  fetchAsyncCreateProf,
+} from "./authSlice";
+
+const customStyles = { //モーダルのスタイルを定義
+  overlay: { //モーダル以外のバックグラウンドの色
+    backgroundColor: "#777777",
+  },
+  content: { //モーダルの左端の位置が
+    top: "55%",  //上から55%
+    left: "50%", //左から50%
+
+    width: 280, //モーダルの幅
+    height: 350, //高さ
+    padding: "50px",
+
+    transform: "translate(-50%, -50%)",
+    //top,leftで指定できるのは左端の位置、上記の記述では左端の位置が真ん中に来ている
+    //transformで-50%してあげることでモーダルがちょうど真ん中に来る
+  },
+};
+
+export const Auth: React.FC = () => {
+  Modal.setAppElement('#root');
+  //ReactのFCでモーダルを使用する場合,FCのなかでmodalのsetAppElementで使われるDOMのIDを指定する必要がある
+  //index.tsを確認するとrootという名前のDOMになっている
+  const openSignIn = useSelector(selectOpenSignIn);
+  const setOpenSignIn = useSelector(selectOpenSignIn);
+  //authSliceで定義したモーダルの表示、非表示を管理するstateを参照するための関数を実行
+
+  const openSignUp = useSelector(selectOpenSignUp);
+  const isLoadingAuth = useSelector(selectIsLoadingAuth);
+  const dispatch: AppDispatch = useDispatch();
+
+  return (
+    <>
+      <Modal
+        isOpen={openSignUp} //true or falseでオープン、クローズ
+        onRequestClose={async () => { //モーダル以外のところをクリックした場合にモーダルをクローズ
+          await dispatch(resetOpenSignUp());
+        }}
+        style={customStyles}
+      >
+        <Formik
+          initialErrors={{ email: "required" }} //
+          initialValues={{ email: "", password: "" }} //フォームで扱うvalueを定義
+          onSubmit={async (values) => { //submitが押された時の挙動
+            //valuesには入力した値が入る
+            await dispatch(fetchCredStart()); //処理が始まったことを伝えている
+            const resultReg = await dispatch(fetchAsyncRegister(values));
+            // ユーザーが入力してくれた新規登録の情報をdispatchで渡す
+
+            if (fetchAsyncRegister.fulfilled.match(resultReg)) {
+              //上記のdispatchの処理が正常終了(fulfilled)した時のみ実行
+              await dispatch(fetchAsyncLogin(values));
+              //登録情報（values）でログインをする
+
+              await dispatch(fetchAsyncCreateProf({ nickName: "anonymous" }));
+              //nicknameをデフォルト値('anonymous')で作成
+
+              await dispatch(fetchAsyncGetProfs());
+              //プロフィールの一覧を配列で取得
+
+              // await dispatch(fetchAsyncGetPosts());
+              // await dispatch(fetchAsyncGetComments());
+              await dispatch(fetchAsyncGetMyProf());
+              // 自身のプロフィールを取得
+            }
+            await dispatch(fetchCredEnd()); //処理が終わったことを伝えている
+            await dispatch(resetOpenSignUp()); //モーダルを閉じる
+          }}
+
+          //バリデーション
+          validationSchema={Yup.object().shape({
+            email: Yup.string()
+              .email("email format is wrong") //emailのフォーマットに準じているか Yup側でやってくれる
+              .required("email is must"),
+            password: Yup.string().required("password is must").min(4),
+          })}
+        >
+          {({
+            handleSubmit,
+            handleChange,
+            handleBlur,
+            values,//ユーザーが入力した値
+            errors,
+            touched,//入力フォームにフォーカスがあたった場合にtrueになる
+            isValid,//バリデーションに問題がなければtrueになる
+          }) => (
+            <div>
+            <form onSubmit={handleSubmit}>
+              <div className={styles.auth_signUp}>
+                <h1 className={styles.auth_title}>SNS clone</h1>
+                <br />
+                <div className={styles.auth_progress}>
+                  {isLoadingAuth && <CircularProgress />}
+                </div>
+                <br />
+
+                <TextField
+                  placeholder="email"
+                  type="input"
+                  name="email"
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  value={values.email}
+                />
+                <br />
+                {touched.email && errors.email ? (
+                  <div className={styles.auth_error}>{errors.email}</div>
+                ) : null}
+
+                <TextField
+                  placeholder="password"
+                  type="password"
+                  name="password"
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  value={values.password}
+                />
+                {touched.password && errors.password ? (
+                  <div className={styles.auth_error}>{errors.password}</div>
+                ) : null}
+                <br />
+                <br />
+
+                <Button
+                  variant="contained"
+                  color="primary"
+                  disabled={!isValid}
+                  type="submit"
+                >
+                  Register
+                </Button>
+                <br />
+                <br />
+                <span
+                  className={styles.auth_text}
+                  onClick={async () => {
+                    await dispatch(setOpenSignIn());
+                    await dispatch(resetOpenSignUp());
+                  }}
+                >
+                  You already have a account ?
+                </span>
+              </div>
+            </form>
+          </div>
+        )}
+      </Formik>
+    </Modal>
+
+      <Modal
+        isOpen={openSignIn}
+        onRequestClose={async () => {
+          await dispatch(resetOpenSignIn());
+        }}
+        style={customStyles}
+      >
+        <Formik
+          initialErrors={{ email: "required" }}
+          initialValues={{ email: "", password: "" }}
+          onSubmit={async (values) => {
+            await dispatch(fetchCredStart());
+            const result = await dispatch(fetchAsyncLogin(values));
+            if (fetchAsyncLogin.fulfilled.match(result)) {
+              await dispatch(fetchAsyncGetProfs());
+              // await dispatch(fetchAsyncGetPosts());
+              // await dispatch(fetchAsyncGetComments());
+              await dispatch(fetchAsyncGetMyProf());
+            }
+            await dispatch(fetchCredEnd());
+            await dispatch(resetOpenSignIn());
+          }}
+          validationSchema={Yup.object().shape({
+            email: Yup.string()
+              .email("email format is wrong")
+              .required("email is must"),
+            password: Yup.string().required("password is must").min(4),
+          })}
+        >
+          {({
+            handleSubmit,
+            handleChange,
+            handleBlur,
+            values,
+            errors,
+            touched,
+            isValid,
+          }) => (
+            <div>
+              <form onSubmit={handleSubmit}>
+                <div className={styles.auth_signUp}>
+                  <h1 className={styles.auth_title}>SNS clone</h1>
+                  <br />
+                  <div className={styles.auth_progress}>
+                    {isLoadingAuth && <CircularProgress />}
+                                      {/* ローディング中に回転する */}
+                  </div>
+                  <br />
+
+                  <TextField
+                    placeholder="email" //デフォルトで表示される文字
+                    type="input"
+                    name="email"
+                    onChange={handleChange} //値が入力される度にformikのバリデーションを走らせてくれる
+                    onBlur={handleBlur} //入力フォームからフォーカスが外れた時に実行される
+                    value={values.email}
+                  />
+
+                  {touched.email && errors.email ? ( //エラーメッセージの表示
+                  //一度でもフォーカスが当たった場合かつemailにエラー
+                    <div className={styles.auth_error}>{errors.email}</div>
+                  ) : null}
+                  <br />
+
+                  <TextField
+                    placeholder="password"
+                    type="password"
+                    name="password"
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    value={values.password}
+                  />
+                  {touched.password && errors.password ? (
+                    <div className={styles.auth_error}>{errors.password}</div>
+                  ) : null}
+                  <br />
+                  <br />
+
+                  <Button 
+                  // submitボタン
+                    variant="contained"
+                    color="primary"
+                    disabled={!isValid}
+                    type="submit"
+                  >
+                    Login
+                  </Button>
+
+                  <br />
+                  <br />
+                  <span
+                    className={styles.auth_text}
+                    onClick={async () => {
+                      await dispatch(resetOpenSignIn());
+                      await dispatch(setOpenSignUp());
+                    }}
+                  >
+                    You don't have a account ?
+                  </span>
+                </div>
+              </form>
+            </div>
+          )}
+        </Formik>
+
+      </Modal>
+    </>
+  )
+}
+
+export default Auth;
